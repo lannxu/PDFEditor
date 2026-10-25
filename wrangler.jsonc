@@ -1,0 +1,15 @@
+{
+  // Cloudflare Workers 部署配置（纯静态资产模式，无需 Worker 脚本）
+  // 部署: npx wrangler deploy   本地调试: npx wrangler dev
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pdfeditor",
+  "compatibility_date": "2025-10-01",
+  "assets": {
+    "directory": "./public",
+    "not_found_handling": "none"
+  }
+  // 说明：
+  // - 应用为纯前端（pdf.js 渲染 + pdf-lib 导出均在浏览器完成），无服务端逻辑
+  // - 静态资产限制：单文件 < 25MiB（本仓库最大字体 18.7MiB ✓）、共 2 万个文件
+  // - 如未来仓库资产总量超出配额，可将 public/assets/fonts 迁移到 R2 并回填此配置
+}

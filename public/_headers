@@ -1,0 +1,17 @@
+# Cloudflare Workers 静态资产的自定义响应头
+# （Workers Static Assets 原生支持 _headers 文件，此文件不会被当作资产下发）
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: SAMEORIGIN
+
+# 字体与第三方库内容寻址稳定，长缓存
+/assets/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 文档处理完全在本地浏览器进行，明示不索引（私有工具语义）
+/samples/*
+  X-Robots-Tag: noindex

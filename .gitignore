@@ -8,3 +8,7 @@ node_modules/
 *.log
 .err
 *.tmp
+
+# Cloudflare
+.wrangler/
+.dev.vars

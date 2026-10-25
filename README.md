@@ -16,12 +16,34 @@
 
 ```bash
 npm install          # 安装 pdfjs-dist / pdf-lib / fontkit（构建期用）
-npm start            # 启动服务，默认 http://localhost:8023（可 npm start -- 3000）
+npm start            # 本地运行：http://localhost:8023（可 npm start -- 3000 指定端口）
 ```
 
 浏览器打开 <http://localhost:8023>，拖入 PDF 或点击「打开示例文档」。
 
 首次部署后如需重新生成示例文档：`npm run make:sample`。
+
+## 部署到 Cloudflare Workers
+
+应用为**纯静态前端**（渲染与导出全部在浏览器完成），采用 Workers Static Assets 部署，无需任何服务端代码：
+
+```bash
+npm install
+npx wrangler login     # 首次：浏览器授权 Cloudflare 账号
+npm run deploy         # 即 npx wrangler deploy
+```
+
+部署完成后会输出 `https://pdfeditor.<你的子域>.workers.dev`。
+
+- 配置见 [wrangler.jsonc](wrangler.jsonc)：资产目录 `./public`，269 个文件（含全部字体）
+- 自定义响应头（安全头、字体/库长缓存）见 `public/_headers`
+- 本地模拟 Workers 环境：`npm run dev:cf`（wrangler dev，默认 8787 端口）
+- 也可以在 Cloudflare 控制台 **Workers → Create → 连接 Git 仓库**，Build command 填 `npx wrangler deploy`，实现推送即部署
+
+限制与说明：
+- Workers 静态资产单文件上限 25 MiB（本仓库最大字体 msyh.ttf 18.7 MiB ✓）
+- 字体等资产合计约 130 MiB，首次上传较慢；如未来超出配额，可将 `public/assets/fonts` 迁移到 R2 并通过 `_headers`/重定向适配
+- 纯静态部署无服务端日志与计算消耗，免费额度即可承载
 
 > 字体文件在搭建时从 Windows 字体目录复制/抽取到 `public/assets/fonts/`（宋体、微软雅黑为
 > TTC 集合，经 `scripts/expand-fonts.mjs` 纯 Node 抽取为独立 TTF），屏幕显示与导出嵌入使用

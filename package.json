@@ -1,18 +1,24 @@
 {
   "name": "pdfeditor",
   "version": "1.0.0",
-  "description": "以文档为核心的 PDF 在线编辑器：编辑原始文字/图片，添加新元素，pdf-lib 导出",
+  "description": "以文档为核心的 PDF 在线编辑器：编辑原始文字/图片，添加新元素，pdf-lib 导出。可本地运行，亦可一键部署到 Cloudflare Workers。",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "make:sample": "node scripts/make-sample-pdf.mjs"
+    "dev:cf": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "make:sample": "node scripts/make-sample-pdf.mjs",
+    "expand:fonts": "node scripts/expand-fonts.mjs"
   },
-  "keywords": ["pdf", "editor", "pdfjs", "pdf-lib"],
+  "keywords": ["pdf", "editor", "pdfjs", "pdf-lib", "cloudflare-workers"],
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^3.11.174"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
   }
 }
