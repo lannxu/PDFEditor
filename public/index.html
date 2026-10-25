@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF 在线编辑器</title>
+<script>
+// rAF 看门狗：窗口最小化/被遮挡时合成器可能挂起，requestAnimationFrame 永不触发，
+// pdf.js 的渲染调度会因此挂起 —— 检测到该情况后回退为 setTimeout 实现
+(function () {
+  window.requestAnimationFrame(function () { window.__rafOK = true; });
+  setTimeout(function () {
+    if (!window.__rafOK) {
+      window.requestAnimationFrame = function (cb) { return setTimeout(function () { cb(performance.now()); }, 16); };
+      window.cancelAnimationFrame = function (id) { clearTimeout(id); };
+      console.warn('[PDF编辑器] requestAnimationFrame 已挂起，启用 setTimeout 回退');
+    }
+  }, 500);
+})();
+</script>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 顶部工具栏 -->
+  <header id="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M6 2h8l6 6v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V9h5.5L13 3.5zM7 12h10v1.6H7V12zm0 3.4h10V17H7v-1.6zm0 3.4h7v1.6H7v-1.6z"/></svg>
+      <span>PDF 编辑器</span>
+    </div>
+    <button id="btnOpen" class="tb-btn" title="打开 PDF 文件 (Ctrl+O)">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>
+      <span>打开</span>
+    </button>
+    <input type="file" id="filePdf" accept="application/pdf,.pdf" hidden>
+    <input type="file" id="fileImg" accept="image/*" hidden>
+    <div class="tb-sep"></div>
+    <button id="btnUndo" class="tb-btn icon" title="撤销 (Ctrl+Z)" disabled>
+      <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>
+    </button>
+    <button id="btnRedo" class="tb-btn icon" title="重做 (Ctrl+Y)" disabled>
+      <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M18.4 10.6C16.55 8.99 14.15 8 11.5 8c-4.65 0-8.58 3.03-9.96 7.22L3.9 16c1.05-3.19 4.06-5.5 7.6-5.5 1.95 0 3.73.72 5.12 1.88L13 16h9V7l-3.6 3.6z"/></svg>
+    </button>
+    <div class="tb-sep"></div>
+    <div id="toolButtons" class="tb-group"></div>
+    <div class="tb-flex"></div>
+    <div id="zoomBox" class="tb-group">
+      <button id="btnZoomOut" class="tb-btn icon" title="缩小 (Ctrl+-)"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 13H5v-2h14v2z"/></svg></button>
+      <select id="zoomSelect" title="缩放比例">
+        <option value="0.5">50%</option>
+        <option value="0.75">75%</option>
+        <option value="1" selected>100%</option>
+        <option value="1.25">125%</option>
+        <option value="1.5">150%</option>
+        <option value="2">200%</option>
+        <option value="3">300%</option>
+        <option value="4">400%</option>
+        <option value="fit">适应宽度</option>
+      </select>
+      <button id="btnZoomIn" class="tb-btn icon" title="放大 (Ctrl+=)"><svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+    </div>
+    <div class="tb-sep"></div>
+    <button id="btnExport" class="tb-btn primary" title="导出编辑后的 PDF (Ctrl+S)">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+      <span>导出 PDF</span>
+    </button>
+  </header>
+
+  <!-- 上下文属性栏（随工具/选中元素变化） -->
+  <div id="propsBar" class="hidden"></div>
+
+  <div id="main">
+    <!-- 左侧页面缩略图 -->
+    <aside id="sidebar">
+      <div id="thumbs" class="hidden"></div>
+      <div id="sidebarEmpty">打开文档后<br>此处显示页面缩略图</div>
+    </aside>
+    <!-- 中央文档视图 -->
+    <div id="viewer">
+      <div id="pages"></div>
+    </div>
+  </div>
+
+  <footer id="statusbar">
+    <div id="stLeft"></div>
+    <div id="stRight"></div>
+  </footer>
+
+  <!-- 欢迎页 -->
+  <div id="welcome">
+    <div class="wl-card">
+      <div class="wl-logo">
+        <svg viewBox="0 0 24 24" width="46" height="46"><path fill="currentColor" d="M6 2h8l6 6v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm7 1.5V9h5.5L13 3.5zM7 12h10v1.6H7V12zm0 3.4h10V17H7v-1.6zm0 3.4h7v1.6H7v-1.6z"/></svg>
+      </div>
+      <h1>PDF 在线编辑器</h1>
+      <p class="wl-sub">以文档为核心 · 编辑原始文字与图片 · 添加新元素 · 本地处理，文件不上传</p>
+      <div id="dropZone" class="wl-drop">
+        <svg viewBox="0 0 24 24" width="40" height="40"><path fill="currentColor" d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+        <div>拖放 PDF 到此处，或</div>
+        <button id="wlOpen" class="tb-btn primary">打开 PDF 文件</button>
+        <button id="wlSample" class="tb-btn" title="生成并打开一份测试文档">打开示例文档</button>
+      </div>
+      <div class="wl-recent">
+        <h3>最近文件</h3>
+        <div id="recentList"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <div id="modalRoot" class="hidden"></div>
+  <div id="loading" class="hidden">
+    <div class="ld-box"><div class="ld-spin"></div><div id="ldText">正在加载…</div></div>
+  </div>
+</div>
+
+<script src="vendor/pdfjs/pdf.min.js"></script>
+<script src="vendor/pdf-lib/pdf-lib.min.js"></script>
+<script src="vendor/pdf-lib/fontkit.umd.min.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

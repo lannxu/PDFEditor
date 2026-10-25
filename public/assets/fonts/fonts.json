@@ -1,0 +1,37 @@
+{
+  "families": [
+    { "id": "simhei", "name": "黑体", "css": "PF-simhei, SimHei, 'Microsoft YaHei', sans-serif", "file": "simhei.ttf", "cjk": true },
+    { "id": "simsun", "name": "宋体", "css": "PF-simsun, SimSun, NSimSun, serif", "file": "simsun.ttf", "cjk": true },
+    { "id": "msyh", "name": "微软雅黑", "css": "PF-msyh, 'Microsoft YaHei', sans-serif", "file": "msyh.ttf", "cjk": true },
+    { "id": "simkai", "name": "楷体", "css": "PF-simkai, KaiTi, SimKai, serif", "file": "simkai.ttf", "cjk": true },
+    { "id": "simfang", "name": "仿宋", "css": "PF-simfang, FangSong, SimFang, serif", "file": "simfang.ttf", "cjk": true },
+    { "id": "dengxian", "name": "等线", "css": "PF-dengxian, DengXian, sans-serif", "file": "Deng.ttf", "cjk": true },
+    { "id": "arial", "name": "Arial", "css": "PF-arial, Arial, Helvetica, sans-serif, PF-simhei, SimHei", "file": "arial.ttf", "cjk": false },
+    { "id": "times", "name": "Times New Roman", "css": "PF-times, 'Times New Roman', Times, serif, PF-simhei, SimHei", "file": "times.ttf", "cjk": false },
+    { "id": "courier", "name": "Courier", "css": "PF-courier, 'Courier New', monospace, PF-simhei, SimHei", "file": "cour.ttf", "cjk": false },
+    { "id": "helv", "name": "Helvetica (内置)", "css": "Helvetica, Arial, sans-serif, PF-simhei, SimHei", "file": null, "cjk": false },
+    { "id": "calibri", "name": "Calibri", "css": "PF-calibri, Calibri, Carlito, sans-serif, PF-simhei, SimHei", "file": "calibri.ttf", "cjk": false },
+    { "id": "cambria", "name": "Cambria", "css": "PF-cambria, Cambria, Caladea, serif, PF-simhei, SimHei", "file": "cambria.ttf", "cjk": false },
+    { "id": "consolas", "name": "Consolas", "css": "PF-consolas, Consolas, 'Courier New', monospace, PF-simhei, SimHei", "file": "consola.ttf", "cjk": false },
+    { "id": "georgia", "name": "Georgia", "css": "PF-georgia, Georgia, serif, PF-simhei, SimHei", "file": "georgia.ttf", "cjk": false },
+    { "id": "verdana", "name": "Verdana", "css": "PF-verdana, Verdana, sans-serif, PF-simhei, SimHei", "file": "verdana.ttf", "cjk": false },
+    { "id": "tahoma", "name": "Tahoma", "css": "PF-tahoma, Tahoma, sans-serif, PF-simhei, SimHei", "file": "tahoma.ttf", "cjk": false },
+    { "id": "trebuchet", "name": "Trebuchet MS", "css": "PF-trebuchet, 'Trebuchet MS', sans-serif, PF-simhei, SimHei", "file": "trebuc.ttf", "cjk": false },
+    { "id": "segoeui", "name": "Segoe UI", "css": "PF-segoeui, 'Segoe UI', sans-serif, PF-simhei, SimHei", "file": "segoeui.ttf", "cjk": false },
+    { "id": "impact", "name": "Impact", "css": "PF-impact, Impact, sans-serif, PF-simhei, SimHei", "file": "impact.ttf", "cjk": false }
+  ],
+  "variants": {
+    "arial":    { "bold": "arialbd.ttf", "italic": "ariali.ttf", "bolditalic": "arialbi.ttf" },
+    "times":    { "bold": "timesbd.ttf", "italic": "timesi.ttf", "bolditalic": "timesbi.ttf" },
+    "courier":  { "bold": "courbd.ttf", "italic": "couri.ttf", "bolditalic": "courbi.ttf" },
+    "msyh":     { "bold": "msyhbd.ttf" },
+    "calibri":  { "bold": "calibrib.ttf", "italic": "calibrii.ttf", "bolditalic": "calibriz.ttf", "light": "calibril.ttf" },
+    "cambria":  { "bold": "cambriab.ttf", "italic": "cambriai.ttf", "bolditalic": "cambriaz.ttf" },
+    "consolas": { "bold": "consolab.ttf", "italic": "consolai.ttf", "bolditalic": "consolaz.ttf" },
+    "georgia":  { "bold": "georgiab.ttf", "italic": "georgiai.ttf", "bolditalic": "georgiaz.ttf" },
+    "verdana":  { "bold": "verdanab.ttf", "italic": "verdanai.ttf", "bolditalic": "verdanaz.ttf" },
+    "tahoma":   { "bold": "tahomabd.ttf" },
+    "trebuchet":{ "bold": "trebucbd.ttf", "italic": "trebucit.ttf", "bolditalic": "trebucbi.ttf" },
+    "segoeui":  { "bold": "segoeuib.ttf", "italic": "segoeuii.ttf", "bolditalic": "segoeuiz.ttf", "light": "segoeuil.ttf" }
+  }
+}

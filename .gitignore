@@ -1,0 +1,10 @@
+# 依赖（构建期通过 npm install 恢复）
+node_modules/
+
+# 本地工具目录
+.mimosa/
+
+# 临时文件
+*.log
+.err
+*.tmp
