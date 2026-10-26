@@ -68,6 +68,15 @@ export function rgbToHex(r, g, b) {
   const h = (v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, '0');
   return `#${h(r)}${h(g)}${h(b)}`;
 }
+// 两色的简单色距（RGB 分量差绝对值之和）
+export function hexDist(a, b) {
+  const pa = hexToRgb01(a), pb = hexToRgb01(b);
+  return Math.abs(pa.r - pb.r) * 255 + Math.abs(pa.g - pb.g) * 255 + Math.abs(pa.b - pb.b) * 255;
+}
+// 在给定背景上选对比更强的黑或白
+export function pickContrast(bg) {
+  return hexDist(bg, '#ffffff') > hexDist(bg, '#000000') ? '#ffffff' : '#000000';
+}
 
 // ---- 文本 ----
 export const CJK_RE = /[\u2E80-\u2EFF\u3000-\u303F\u31C0-\u31EF\u3200-\u9FFF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFFEF]/;

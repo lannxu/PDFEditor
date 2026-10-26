@@ -489,19 +489,21 @@ export function markRunsConsumed(pk, keys) {
 }
 
 // ================= 采样与栅格 =================
-// 从已渲染画布取样文字颜色：与背景差异最大的众数色
-export function sampleColor(pk, bbox) {
+// 从已渲染画布取样：背景色（众数）+ 前景色（与背景差异最大的次众数）
+// 深色底白字场景：bg=深色（用于覆盖块）、fg=白色（文字原色）——避免"白字盖白块"不可见
+export function sampleColors(pk, bbox) {
+  const none = { fg: null, bg: null };
   const pv = pageViews.get(pk);
-  if (!pv || !pv.canvas || !pv.canvas.width) return '#111111';
+  if (!pv || !pv.canvas || !pv.canvas.width) return none;
   const d = state.display.find((p) => p.pk === pk);
   const kx = pv.canvas.width / d.w, ky = pv.canvas.height / d.h;
   const x0 = clamp(Math.floor(bbox.x * kx), 0, pv.canvas.width - 1);
   const y0 = clamp(Math.floor(bbox.y * ky), 0, pv.canvas.height - 1);
   const x1 = clamp(Math.ceil((bbox.x + bbox.w) * kx), 1, pv.canvas.width);
   const y1 = clamp(Math.ceil((bbox.y + bbox.h) * ky), 1, pv.canvas.height);
-  if (x1 - x0 < 2 || y1 - y0 < 2) return '#111111';
+  if (x1 - x0 < 2 || y1 - y0 < 2) return none;
   let data;
-  try { data = pv.canvas.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0).data; } catch { return '#111111'; }
+  try { data = pv.canvas.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0).data; } catch { return none; }
 
   const hist = new Map();
   const q = (v) => v >> 4; // 16 级量化
@@ -510,7 +512,7 @@ export function sampleColor(pk, bbox) {
     const key = (q(data[i]) << 8) | (q(data[i + 1]) << 4) | q(data[i + 2]);
     hist.set(key, (hist.get(key) || 0) + 1);
   }
-  if (!hist.size) return '#111111';
+  if (!hist.size) return none;
   let bgKey = 0, bgN = 0;
   hist.forEach((n, k) => { if (n > bgN) { bgN = n; bgKey = k; } });
   const expand = (k) => [(k >> 8) & 15, (k >> 4) & 15, k & 15].map((v) => v * 16 + 8);
@@ -521,9 +523,15 @@ export function sampleColor(pk, bbox) {
     const dist = Math.abs(c[0] - bg[0]) + Math.abs(c[1] - bg[1]) + Math.abs(c[2] - bg[2]);
     if (dist > 70 && n > fgN) { fgN = n; fgKey = k; }
   });
-  if (fgKey === null) return '#111111';
-  const c = expand(fgKey);
-  return rgbToHex(c[0], c[1], c[2]);
+  return {
+    bg: rgbToHex(bg[0], bg[1], bg[2]),
+    fg: fgKey === null ? null : (() => { const c = expand(fgKey); return rgbToHex(c[0], c[1], c[2]); })(),
+  };
+}
+
+// 兼容旧调用：仅取前景
+export function sampleColor(pk, bbox) {
+  return sampleColors(pk, bbox).fg || '#111111';
 }
 
 // 高清栅格化页面区域 → dataURL（用于剪切原图 / 提取图片）

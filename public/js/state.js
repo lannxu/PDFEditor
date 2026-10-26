@@ -29,7 +29,7 @@ export const state = {
   selection: null,      // {type:'element', id} | {type:'run', pk, run} | {type:'image', pk, img}
   editingTextId: null,  // 正在编辑文字的元素
   defaults: {           // 新元素默认属性（属性栏可改）
-    text: { fontId: 'simhei', size: 14, color: '#111111', bold: false, italic: false, align: 'left', lh: 1.3 },
+    text: { fontId: 'simhei', size: 14, color: '#111111', bold: false, italic: false, align: 'left', lh: 1.3, autoFit: true },
     image: { opacity: 1 },
     rect: { stroke: '#e5484d', strokeWidth: 1.5, fill: 'none', opacity: 1 },
     ellipse: { stroke: '#e5484d', strokeWidth: 1.5, fill: 'none', opacity: 1 },

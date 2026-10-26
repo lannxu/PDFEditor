@@ -1,6 +1,6 @@
 // 上下文属性栏：随选中元素 / 当前工具变化
-import { state, on, getElement, updateElement, snapshot, commit, removeElement } from './state.js';
-import { renderElement, bringForward, sendBackward, elementDom } from './elements.js';
+import { state, on, getElement, updateElement, snapshot, commit, removeElement, pageSize } from './state.js';
+import { renderElement, bringForward, sendBackward, elementDom, autoFitSize } from './elements.js';
 import { families, getFamily } from './fonts.js';
 import { enterTextEdit, duplicateElement } from './interactions.js';
 import { toast } from './ui.js';
@@ -32,6 +32,12 @@ function apply(patch, { live = false } = {}) {
     if (t.e.type === 'text') {
       if (patch.fontId) t.e.customFont = null;
       if (patch.fontId || patch.size) t.e.adv = null;
+      // 自适应元素：影响度量的属性变化后重新收缩到内容
+      const metricKeys = ['fontId', 'size', 'bold', 'italic', 'weight'];
+      if (t.e.autoFit && Object.keys(patch).some((k) => metricKeys.includes(k))) {
+        const pg = pageSize(t.e.page);
+        Object.assign(t.e, autoFitSize(t.e, pg?.w));
+      }
     }
     renderElement(t.e);
     if (!live) { snapshot(); commit('props'); } // 后置快照
@@ -147,6 +153,19 @@ export function renderPropsBar() {
         btn('⯈', { title: '右对齐', on: p.align === 'right', keepFocus: true, onClick: () => apply({ align: 'right' }) })));
       root.appendChild(group(label('行高'),
         rangeCtl(p.lh, { min: 1, max: 2.4, step: 0.05, title: '行距倍数', onLive: (v) => apply({ lh: v }, { live: true }), onCommit: (v) => apply({ lh: v }) })));
+      if (isEl) {
+        root.appendChild(group(
+          btn('⇔ 自适应宽度', {
+            title: '宽度自动收缩到内容（手动拉宽后可点此恢复）', on: !!p.autoFit, onClick: () => {
+              if (p.autoFit) apply({ autoFit: false });
+              else {
+                const pg = pageSize(p.page);
+                const fit = autoFitSize(p, pg?.w);
+                apply({ autoFit: true, w: fit.w, h: fit.h });
+              }
+            },
+          })));
+      }
       if (isEl) {
         root.appendChild(group(
           btn('层级▲', { title: '上移一层', onClick: () => { bringForward(p.id); snapshot(); commit('z'); } }),

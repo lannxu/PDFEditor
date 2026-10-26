@@ -1,8 +1,8 @@
 // 交互控制器：工具状态机、绘制、拖动、缩放、旋转、文字编辑、原文操作
 import { state, on, emit, setTool, setSelection, snapshot, commit, addElements, removeElement, getElement, updateElement } from './state.js';
-import { makeElement, normalizeImageFile, renderElement, whiteoutRectForRun, rebuildCoveredTexts, elementDom, bringForward, sendBackward, styleFromRun } from './elements.js';
+import { makeElement, normalizeImageFile, renderElement, whiteoutRectForRun, rebuildCoveredTexts, elementDom, bringForward, sendBackward, styleFromRun, autoFitSize } from './elements.js';
 import { getPageView, getSource, rasterRegion, ensureSourceLayer } from './pdfview.js';
-import { clamp, uid } from './util.js';
+import { clamp, uid, hexDist, pickContrast } from './util.js';
 import { toast } from './ui.js';
 
 const pagesEl = () => document.getElementById('pages');
@@ -390,10 +390,16 @@ export async function commitTextEdit() {
     dom.removeEventListener('blur', onTextBlur);
     dom.removeEventListener('keydown', onTextKeydown);
     dom.removeEventListener('paste', onTextPaste);
-    const txt = (dom.innerText || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
-    el.text = txt;
+  const txt = (dom.innerText || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+  el.text = txt;
+  if (el.autoFit) {
+    // 自适应宽度：收缩到内容自然宽（不受旧宽度影响折行）
+    const pg = pageOf(el.page);
+    Object.assign(el, autoFitSize(el, pg?.w));
+  } else {
     el.h = Math.max(el.size * el.lh, Math.round(dom.offsetHeight * 10) / 10);
-    dom.style.height = '';
+  }
+  dom.style.height = '';
   }
   state.editingTextId = null;
   if (el && !el.text) {
@@ -495,8 +501,11 @@ function onPointerUp() {
     snapshot();
     commit('move');
   } else if (o.kind === 'resize' || o.kind === 'rotate' || o.kind === 'endpoint') {
-    // 文本宽度变化会改变折行数——按新内容同步高度，保持选中框/手柄与内容一致
-    if (o.kind === 'resize' && el.type === 'text') syncTextHeight(el);
+    // 手动拉宽文本 → 退出自适应（用户接管宽度）；高度按新折行同步
+    if (o.kind === 'resize' && el.type === 'text') {
+      el.autoFit = false;
+      syncTextHeight(el);
+    }
     snapshot();
     commit(o.kind);
   }
@@ -531,6 +540,7 @@ async function runToTextElement(pk, run) {
     text: run.str.replace(/\s+$/, ''),
     ...style,
     lh, rot: run.angle,
+    autoFit: false, // 原文还原：固定原宽度（配合 scaleX/adv）
   });
   return el;
 }
@@ -539,12 +549,16 @@ async function editRun(pk, run) {
   hideMiniBar();
   const wo = whiteoutRectForRun(pk, run);
   const { markRunsConsumed } = await import('./pdfview.js');
-  const color = (await import('./pdfview.js')).sampleColor(pk, run.bbox);
+  // 双色采样：覆盖块用局部背景色（深底不会变白块），文字用原前景色并保对比度
+  const { fg, bg } = (await import('./pdfview.js')).sampleColors(pk, run.bbox);
+  const coverColor = bg || '#ffffff';
+  let color = fg || '#111111';
+  if (hexDist(color, coverColor) < 60) color = pickContrast(coverColor);
   markRunsConsumed(pk, [run.key]);
   const textEl = await runToTextElement(pk, run);
   textEl.color = color;
-  const covered = await rebuildCoveredTexts(pk, wo);
-  addElements([makeElement('whiteout', pk, wo.x, wo.y, wo.w, wo.h), ...covered, textEl]);
+  const covered = await rebuildCoveredTexts(pk, wo, { coverColor });
+  addElements([makeElement('whiteout', pk, wo.x, wo.y, wo.w, wo.h, { color: coverColor }), ...covered, textEl]);
   setSelection({ type: 'element', id: textEl.id });
   enterTextEdit(textEl, { selectAll: false });
   // 光标置于末尾

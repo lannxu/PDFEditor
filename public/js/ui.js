@@ -58,7 +58,9 @@ export function initUi() {
   });
 
   $('#btnExport').addEventListener('click', exportPdf);
-  on('export-start', () => showLoading('正在导出 PDF…'));
+  $('#btnWord').addEventListener('click', () => import('./exporter-office.js').then((m) => m.exportDocx()));
+  $('#btnPpt').addEventListener('click', () => import('./exporter-office.js').then((m) => m.exportPptx()));
+  on('export-start', (label) => showLoading(label || '正在导出 PDF…'));
   on('export-end', hideLoading);
 
   initZoom();

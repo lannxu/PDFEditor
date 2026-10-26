@@ -3,7 +3,7 @@ import { state, on, emit, getElement, updateElement } from './state.js';
 import { uid } from './util.js';
 import { getFamily } from './fonts.js';
 import { cssStack as origCssStack } from './origfonts.js';
-import { getPageView, getSource, markRunsConsumed, sampleColor } from './pdfview.js';
+import { getPageView, getSource, markRunsConsumed, sampleColors } from './pdfview.js';
 
 // ---------- 工厂 ----------
 export function makeElement(type, page, x, y, w, h, extra = {}) {
@@ -211,15 +211,34 @@ export function renderAllElements() {
   state.elements.forEach(renderElement);
 }
 
+// ---------- 文本自适应宽度 ----------
+// 元素显示字体栈（与 renderElement 一致）
+export function cssStackOf(el) {
+  const famCss = getFamily(el.fontId)?.css || 'sans-serif';
+  return el.customFont ? origCssStack(el.customFont, famCss) : famCss;
+}
+// 按当前字体/字号/字重/斜体计算自适应尺寸：宽 = 最长行自然宽，高 = 行数×行高
+export function autoFitSize(el, pageW) {
+  const css = `${el.italic ? 'italic ' : ''}${el.weight || (el.bold ? 700 : 400)} ${el.size}px ${cssStackOf(el)}`;
+  const lines = String(el.text || '').split('\n');
+  let max = 0;
+  for (const line of lines) max = Math.max(max, measureCssWidth(line, css) || 0);
+  const w = Math.min(Math.max(24, Math.ceil(max) + 4), Math.max(40, (pageW || 600) - el.x - 8));
+  const h = Math.max(el.size * (el.lh || 1.3), Math.round(lines.length * el.size * (el.lh || 1.3) * 10) / 10);
+  return { w: Math.round(w * 10) / 10, h };
+}
+
 // ---------- 原文样式精细还原 ----------
 // 度量文本在指定字体栈下的自然宽度（pt）
 let _measureCtx = null;
-export function measureTextWidth(text, cssStackStr, size) {
+export function measureCssWidth(text, css) {
   if (!_measureCtx) _measureCtx = document.createElement('canvas').getContext('2d');
-  _measureCtx.font = `${size}px ${cssStackStr}`;
+  _measureCtx.font = css;
   return _measureCtx.measureText(text).width;
 }
-
+export function measureTextWidth(text, cssStackStr, size) {
+  return measureCssWidth(text, `${size}px ${cssStackStr}`);
+}
 // 从文字运行生成元素样式：字体族 / 原始嵌入字体 / 宽度比例补偿 / 字号 / 字重 / 粗斜体
 export async function styleFromRun(run) {
   const famId = run.fontId || (/^[\x00-\xFF\s]*$/.test(run.str) ? 'arial' : 'simhei');
@@ -277,8 +296,8 @@ export async function runsUnderRect(pk, rect) {
 }
 
 // 在涂白操作后自动重建被覆盖的文字（保持文档可读）
-// options.skipInside: 完全处于区域内的运行不重建（例如剪切图片时栅格里已含文字）
-export async function rebuildCoveredTexts(pk, rect, { skipFullyInside = false } = {}) {
+// options.skipInside: 完全处于区域内的运行不重建；coverColor: 覆盖块颜色（重建文字需保持可读）
+export async function rebuildCoveredTexts(pk, rect, { skipFullyInside = false, coverColor = '#ffffff' } = {}) {
   const consumed = new Set(state.consumedRuns[pk] || []);
   const runs = await runsUnderRect(pk, rect);
   const created = [];
@@ -287,7 +306,8 @@ export async function rebuildCoveredTexts(pk, rect, { skipFullyInside = false } 
     const inside = coverOf(r.bbox, rect);
     if (skipFullyInside && inside > 0.92) { markRunsConsumed(pk, [r.key]); continue; }
     const style = await styleFromRun(r);
-    const color = sampleColor(pk, r.bbox);
+    let color = sampleColors(pk, r.bbox).fg || '#111111';
+    if (hexDist(color, coverColor) < 60) color = pickContrast(coverColor);
     const asc = r.asc, size = style.size;
     const lh = 1.15;
     const el = makeElement('text', pk, r.vx, r.vy - (asc + (lh - 1) / 2) * r.fs, r.w + size * 0.6, r.fs * lh * 1.35, {
