@@ -331,8 +331,8 @@ export function enterTextEdit(el, { selectAll = true } = {}) {
   const dom = elementDom(el);
   if (!dom) return;
   // 非编辑态可能渲染为逐项字距 span（adv）——编辑前重置为纯文本，避免 contenteditable 操作 span 节点
+  // （宽度 auto + 页缘上限的编辑态样式由 renderElement 统一处理）
   if (dom.children.length > 0) dom.textContent = el.text || '';
-  dom.style.height = 'auto';
   dom.focus();
   const sel = window.getSelection();
   const range = document.createRange();
@@ -390,21 +390,23 @@ export async function commitTextEdit() {
     dom.removeEventListener('blur', onTextBlur);
     dom.removeEventListener('keydown', onTextKeydown);
     dom.removeEventListener('paste', onTextPaste);
-  const txt = (dom.innerText || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
-  el.text = txt;
-  const pg = pageOf(el.page);
-  if (textDirty && el.coverId) {
-    // 原文转换元素：内容变化 → 完整重排（收缩/加宽/页缘折行），宽度补偿与逐项字距失效
-    el.scaleX = 1;
-    el.adv = null;
-    Object.assign(el, fitTextSize(el, pg?.w));
-  } else if (el.autoFit) {
-    // 自适应宽度：收缩到内容自然宽（不受旧宽度影响折行）
-    Object.assign(el, autoFitSize(el, pg?.w));
-  } else {
-    el.h = Math.max(el.size * el.lh, Math.round(dom.offsetHeight * 10) / 10);
-  }
-  dom.style.height = '';
+    const txt = (dom.innerText || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+    el.text = txt;
+    const pg = pageOf(el.page);
+    if (textDirty && el.coverId) {
+      // 原文转换元素：内容变化 → 完整重排（收缩/加宽/页缘折行），宽度补偿与逐项字距失效
+      el.scaleX = 1;
+      el.adv = null;
+      Object.assign(el, fitTextSize(el, pg?.w));
+    } else if (el.autoFit) {
+      // 自适应宽度：收缩到内容自然宽（不受旧宽度影响折行）
+      Object.assign(el, autoFitSize(el, pg?.w));
+    } else {
+      el.h = Math.max(el.size * el.lh, Math.round(dom.offsetHeight * 10) / 10);
+    }
+    dom.style.width = '';
+    dom.style.maxWidth = '';
+    dom.style.height = '';
   }
   state.editingTextId = null;
   if (el && !el.text) {
@@ -429,8 +431,8 @@ export async function commitTextEdit() {
   }
 }
 
-// 框-盖联动：覆盖块取「原始区域 ∪ 当前内容区域」，扩展后重建新被盖住的原文行
-// （编辑原文折行下探时，下一行原文会被盖住——重建为可读元素，不丢内容）
+// 框-盖联动：覆盖块取「原始区域 ∪ 当前内容区域」；折行下探占用的空间，
+// 由被盖住的原文行"下推让位"——重建到新内容下方，若再压到更下行则级联下推（局部重排）
 async function reconcileCover(el) {
   if (!el.coverId) return;
   const cover = getElement(el.coverId);
@@ -444,8 +446,49 @@ async function reconcileCover(el) {
   if (!changed) return;
   Object.assign(cover, rect);
   renderElement(cover);
-  const rebuilt = await rebuildCoveredTexts(el.page, rect, { coverColor: cover.color || '#ffffff' });
-  if (rebuilt.length) addElements(rebuilt, { snapshot: false });
+  const pushed = await cascadeRebuildBelow(el.page, rect, cover.color || '#ffffff');
+  if (pushed.length) addElements(pushed, { snapshot: false });
+}
+
+// 级联下推：盖住区域内的原文行 → 重建为元素并移到 pushBelow 之下依次排列；
+// 重建行若又与更下方原文重叠，继续处理（guard 限深防失控）
+async function cascadeRebuildBelow(pk, coverRect, coverColor) {
+  const { markRunsConsumed, sampleColors } = await import('./pdfview.js');
+  const created = [];
+  let queue = [{ rect: coverRect }];
+  let pushBelow = coverRect.y + coverRect.h + 4;
+  let guard = 0;
+  const consumed = new Set();
+  while (queue.length && guard++ < 12) {
+    const { rect: area } = queue.shift();
+    const hits = getSource(pk).runs.filter((r) => {
+      if (consumed.has(r.key)) return false;
+      const bb = r.bbox;
+      return bb.x < area.x + area.w && bb.x + bb.w > area.x && bb.y < area.y + area.h && bb.y + bb.h > area.y;
+    }).sort((a, b) => a.bbox.y - b.bbox.y); // 自上而下依次让位
+    for (const r of hits) {
+      if ((state.consumedRuns[pk] || []).includes(r.key)) { consumed.add(r.key); continue; }
+      const style = await styleFromRun(r);
+      let color = sampleColors(pk, r.bbox).fg || '#111111';
+      const dy = Math.max(0, pushBelow - r.bbox.y); // 让位：行顶挪到新内容底部之下
+      // 让位后落在页面自身背景上（盖块之外）：按落点背景保对比度
+      const bgHere = sampleColors(pk, { x: r.bbox.x, y: r.bbox.y + dy, w: r.bbox.w, h: r.bbox.h }).bg || '#ffffff';
+      if (hexDist(color, bgHere) < 60) color = pickContrast(bgHere);
+      const lh = 1.15;
+      const el2 = makeElement('text', pk, r.vx, r.vy - (r.asc + (lh - 1) / 2) * r.fs + dy, Math.max(r.w + style.size * 0.6, style.size * 2), r.fs * lh * 1.2, {
+        text: r.str.replace(/\s+$/, ''),
+        ...style, color, lh, rot: r.angle,
+        autoFit: false, redrawn: r.key,
+      });
+      created.push(el2);
+      consumed.add(r.key);
+      markRunsConsumed(pk, [r.key]);
+      pushBelow = el2.y + el2.h + 4; // 后续让位行依次排在其下
+      // 下移后的行若压到更下方原文 → 级联
+      queue.push({ rect: { x: el2.x, y: el2.y, w: el2.w, h: el2.h } });
+    }
+  }
+  return created;
 }
 on('restored', () => {
   // 撤销/重做恢复了全新状态：丢弃进行中的指针操作，避免把旧修改写回（元素对象已被替换）

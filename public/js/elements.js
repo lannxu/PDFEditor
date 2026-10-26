@@ -63,6 +63,13 @@ export function renderElement(el) {
   dom.style.top = el.y + 'px';
   dom.style.width = el.w + 'px';
   dom.style.height = el.h + 'px';
+  // 编辑中的文字：宽度 auto（打字实时生长），上限 = 页面右缘——不提前折行压住下一行
+  if (el.type === 'text' && state.editingTextId === el.id) {
+    const d = state.display.find((p) => p.pk === el.page);
+    dom.style.width = 'auto';
+    dom.style.maxWidth = Math.max(40, (d ? d.w : 600) - el.x - 8) + 'px';
+    dom.style.height = 'auto';
+  }
   dom.classList.toggle('sel', state.selection?.type === 'element' && state.selection.id === el.id);
 
   const z = 100 + state.elements.indexOf(el);
