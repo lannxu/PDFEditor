@@ -1,6 +1,6 @@
 // 编辑元素：模型工厂 + DOM 渲染同步
 import { state, on, emit, getElement, updateElement } from './state.js';
-import { uid } from './util.js';
+import { uid, hexDist, pickContrast } from './util.js';
 import { getFamily } from './fonts.js';
 import { cssStack as origCssStack } from './origfonts.js';
 import { getPageView, getSource, markRunsConsumed, sampleColors } from './pdfview.js';
@@ -226,6 +226,28 @@ export function autoFitSize(el, pageW) {
   const w = Math.min(Math.max(24, Math.ceil(max) + 4), Math.max(40, (pageW || 600) - el.x - 8));
   const h = Math.max(el.size * (el.lh || 1.3), Math.round(lines.length * el.size * (el.lh || 1.3) * 10) / 10);
   return { w: Math.round(w * 10) / 10, h };
+}
+
+// 内容驱动的完整重排（编辑原文的转换元素用）：
+// 短则收缩、长则先加宽、到页面右缘才折行，高度随行数——返回新尺寸与行数
+export function fitTextSize(el, pageW) {
+  const css = `${el.italic ? 'italic ' : ''}${el.weight || (el.bold ? 700 : 400)} ${el.size}px ${cssStackOf(el)}`;
+  const avail = Math.max(40, (pageW || 600) - el.x - 8);
+  const out = [];
+  for (const para of String(el.text || '').split('\n')) {
+    if (measureCssWidth(para, css) <= avail) { out.push(para); continue; }
+    let cur = '';
+    for (const ch of para) {
+      if (cur && measureCssWidth(cur + ch, css) > avail) { out.push(cur); cur = ch; }
+      else cur += ch;
+    }
+    if (cur) out.push(cur);
+  }
+  const max = Math.max(10, ...out.map((l) => measureCssWidth(l, css)));
+  const w = Math.min(avail, Math.max(24, Math.ceil(max) + 4));
+  const lh = el.lh || 1.3;
+  const h = Math.max(el.size * lh, Math.round(out.length * el.size * lh * 10) / 10);
+  return { w: Math.round(w * 10) / 10, h, lineCount: out.length };
 }
 
 // ---------- 原文样式精细还原 ----------

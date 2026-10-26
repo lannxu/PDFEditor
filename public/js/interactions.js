@@ -1,6 +1,6 @@
 // 交互控制器：工具状态机、绘制、拖动、缩放、旋转、文字编辑、原文操作
 import { state, on, emit, setTool, setSelection, snapshot, commit, addElements, removeElement, getElement, updateElement } from './state.js';
-import { makeElement, normalizeImageFile, renderElement, whiteoutRectForRun, rebuildCoveredTexts, elementDom, bringForward, sendBackward, styleFromRun, autoFitSize } from './elements.js';
+import { makeElement, normalizeImageFile, renderElement, whiteoutRectForRun, rebuildCoveredTexts, elementDom, bringForward, sendBackward, styleFromRun, autoFitSize, fitTextSize } from './elements.js';
 import { getPageView, getSource, rasterRegion, ensureSourceLayer } from './pdfview.js';
 import { clamp, uid, hexDist, pickContrast } from './util.js';
 import { toast } from './ui.js';
@@ -392,9 +392,14 @@ export async function commitTextEdit() {
     dom.removeEventListener('paste', onTextPaste);
   const txt = (dom.innerText || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
   el.text = txt;
-  if (el.autoFit) {
+  const pg = pageOf(el.page);
+  if (textDirty && el.coverId) {
+    // 原文转换元素：内容变化 → 完整重排（收缩/加宽/页缘折行），宽度补偿与逐项字距失效
+    el.scaleX = 1;
+    el.adv = null;
+    Object.assign(el, fitTextSize(el, pg?.w));
+  } else if (el.autoFit) {
     // 自适应宽度：收缩到内容自然宽（不受旧宽度影响折行）
-    const pg = pageOf(el.page);
     Object.assign(el, autoFitSize(el, pg?.w));
   } else {
     el.h = Math.max(el.size * el.lh, Math.round(dom.offsetHeight * 10) / 10);
@@ -415,10 +420,32 @@ export async function commitTextEdit() {
     }
     // 文本已修改 → 逐项字距数据失效（项边界不再对应新文本）
     if (textDirty && el.adv && el.text !== el.advText) el.adv = null;
-    if (textDirty) snapshot(); // 文字提交后的状态入栈，保证重做可恢复
+    if (textDirty) {
+      await reconcileCover(el); // 覆盖块扩展 + 新被盖原文行重建（先于快照，合并为一步历史）
+      snapshot(); // 文字提交后的状态入栈，保证重做可恢复
+    }
     renderElement(el);
     commit('text-commit');
   }
+}
+
+// 框-盖联动：覆盖块取「原始区域 ∪ 当前内容区域」，扩展后重建新被盖住的原文行
+// （编辑原文折行下探时，下一行原文会被盖住——重建为可读元素，不丢内容）
+async function reconcileCover(el) {
+  if (!el.coverId) return;
+  const cover = getElement(el.coverId);
+  if (!cover) return;
+  const oc = el.origCover || { x: cover.x, y: cover.y, w: cover.w, h: cover.h };
+  const nb = { x: el.x - 1, y: el.y - 1, w: el.w + 2, h: el.h + 2 };
+  const x = Math.min(oc.x, nb.x), y = Math.min(oc.y, nb.y);
+  const r = Math.max(oc.x + oc.w, nb.x + nb.w), b = Math.max(oc.y + oc.h, nb.y + nb.h);
+  const rect = { x, y, w: r - x, h: b - y };
+  const changed = ['x', 'y', 'w', 'h'].some((k) => Math.abs(rect[k] - cover[k]) > 0.1);
+  if (!changed) return;
+  Object.assign(cover, rect);
+  renderElement(cover);
+  const rebuilt = await rebuildCoveredTexts(el.page, rect, { coverColor: cover.color || '#ffffff' });
+  if (rebuilt.length) addElements(rebuilt, { snapshot: false });
 }
 on('restored', () => {
   // 撤销/重做恢复了全新状态：丢弃进行中的指针操作，避免把旧修改写回（元素对象已被替换）
@@ -501,13 +528,14 @@ function onPointerUp() {
     snapshot();
     commit('move');
   } else if (o.kind === 'resize' || o.kind === 'rotate' || o.kind === 'endpoint') {
-    // 手动拉宽文本 → 退出自适应（用户接管宽度）；高度按新折行同步
+    const finish = () => { snapshot(); commit(o.kind); };
+    // 手动拉宽文本 → 退出自适应（用户接管宽度）；高度按新折行同步；转换元素联动覆盖块
     if (o.kind === 'resize' && el.type === 'text') {
       el.autoFit = false;
       syncTextHeight(el);
+      if (el.coverId) { reconcileCover(el).then(finish); return; }
     }
-    snapshot();
-    commit(o.kind);
+    finish();
   }
   emit('element-updated', { id: el.id });
 }
@@ -557,8 +585,12 @@ async function editRun(pk, run) {
   markRunsConsumed(pk, [run.key]);
   const textEl = await runToTextElement(pk, run);
   textEl.color = color;
+  const coverEl = makeElement('whiteout', pk, wo.x, wo.y, wo.w, wo.h, { color: coverColor });
+  // 框-盖联动：内容重排后覆盖块跟随扩展，并自动重建新被盖住的原文行
+  textEl.coverId = coverEl.id;
+  textEl.origCover = { x: wo.x, y: wo.y, w: wo.w, h: wo.h };
   const covered = await rebuildCoveredTexts(pk, wo, { coverColor });
-  addElements([makeElement('whiteout', pk, wo.x, wo.y, wo.w, wo.h, { color: coverColor }), ...covered, textEl]);
+  addElements([coverEl, ...covered, textEl]);
   setSelection({ type: 'element', id: textEl.id });
   enterTextEdit(textEl, { selectAll: false });
   // 光标置于末尾
